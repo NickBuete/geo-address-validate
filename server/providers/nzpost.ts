@@ -26,91 +26,24 @@ type NzPostTokenCache = {
 let nzPostTokenCache: NzPostTokenCache | null = null
 let nzPostTokenPromise: Promise<string> | null = null
 
-// Optional Vercel KV integration. Enable by setting USE_VERCEL_KV=1 or
-// providing VERCEL_KV_URL in the environment (and installing @vercel/kv).
-const USE_VERCEL_KV = Boolean(
-  process.env.USE_VERCEL_KV ||
-    process.env.VERCEL_KV_URL ||
-    process.env.VERCEL_KV
-)
-
-let kvClientPromise: Promise<any> | null = null
-async function getKvClient() {
-  if (!USE_VERCEL_KV) return null
-  if (!kvClientPromise) {
-    kvClientPromise = (async () => {
-      try {
-        // dynamic import so local dev doesn't require @vercel/kv
-        const mod = await import('@vercel/kv')
-        // createClient is the recommended entry
-        const client =
-          typeof mod.createClient === 'function'
-            ? mod.createClient()
-            : mod.default?.createClient?.()
-        return client || mod
-      } catch (err) {
-        // KV not available — fall back to memory cache
-        return null
-      }
-    })()
-  }
-  return kvClientPromise
+// Resolve Upstash config with common fallback env names used in dashboard/.env
+function resolveUpstashConfig() {
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    process.env.REDIS_URL ||
+    process.env.KV_URL ||
+    ''
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    process.env.KV_REST_API_READ_ONLY_TOKEN ||
+    ''
+  return { url: url || null, token: token || null }
 }
 
-async function kvGet(key: string): Promise<any | null> {
-  const kv = await getKvClient()
-  if (!kv) return null
-  try {
-    const raw = await kv.get(key)
-    if (!raw) return null
-    // stored as JSON string or raw object
-    if (typeof raw === 'string') {
-      try {
-        return JSON.parse(raw)
-      } catch (e) {
-        return raw
-      }
-    }
-    return raw
-  } catch (e) {
-    return null
-  }
-}
-
-async function kvSet(key: string, value: any, ttlSeconds?: number) {
-  const kv = await getKvClient()
-  if (!kv) return
-  try {
-    const payload = typeof value === 'string' ? value : JSON.stringify(value)
-    if (typeof ttlSeconds === 'number' && ttlSeconds > 0) {
-      // @vercel/kv supports options like { ex: seconds }
-      // some clients accept a third-arg options object
-      await kv.set(key, payload, { ex: ttlSeconds })
-    } else {
-      await kv.set(key, payload)
-    }
-  } catch (e) {
-    // ignore KV errors — fall back to memory
-    return
-  }
-}
-
-async function kvDel(key: string) {
-  const kv = await getKvClient()
-  if (!kv) return
-  try {
-    await kv.del(key)
-  } catch (e) {
-    return
-  }
-}
-
-// Upstash Redis adapter (REST-based). Enable by setting UPSTASH_REDIS_REST_URL
-// and UPSTASH_REDIS_REST_TOKEN in env. We dynamically import so local dev
-// doesn't require the package unless configured.
-const USE_UPSTASH = Boolean(
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-)
+const UPSTASH_CONFIG = resolveUpstashConfig()
+const USE_UPSTASH = Boolean(UPSTASH_CONFIG.url && UPSTASH_CONFIG.token)
 
 let upstashClientPromise: Promise<any> | null = null
 async function getUpstashClient() {
@@ -119,15 +52,12 @@ async function getUpstashClient() {
     upstashClientPromise = (async () => {
       try {
         const mod = await import('@upstash/redis')
-        // Redis constructor is exported as Redis
         const RedisCtor = mod.Redis || mod.default?.Redis
-        const client = RedisCtor
-          ? new RedisCtor({
-              url: process.env.UPSTASH_REDIS_REST_URL!,
-              token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-            })
-          : null
-        return client
+        if (!RedisCtor) return null
+        return new RedisCtor({
+          url: UPSTASH_CONFIG.url!,
+          token: UPSTASH_CONFIG.token!,
+        })
       } catch (e) {
         return null
       }
@@ -141,7 +71,7 @@ async function upstashGet(key: string): Promise<any | null> {
   if (!c) return null
   try {
     const v = await c.get(key)
-    if (!v) return null
+    if (v == null) return null
     if (typeof v === 'string') {
       try {
         return JSON.parse(v)
@@ -161,7 +91,6 @@ async function upstashSet(key: string, value: any, ttlSeconds?: number) {
   try {
     const s = typeof value === 'string' ? value : JSON.stringify(value)
     if (typeof ttlSeconds === 'number' && ttlSeconds > 0) {
-      // Upstash supports EX via setex
       if (typeof c.setex === 'function') {
         await c.setex(key, ttlSeconds, s)
       } else if (typeof c.set === 'function') {
@@ -198,14 +127,12 @@ function getNzPostCredentials() {
 
 function invalidateNzPostToken() {
   nzPostTokenCache = null
-  // also remove from KV if configured
+  // Remove from Upstash if configured
   ;(async () => {
     try {
-      // prefer Upstash if configured
       if (USE_UPSTASH) {
         await upstashDel('nzpost:access_token')
       }
-      await kvDel('nzpost:access_token')
     } catch (e) {
       /* ignore */
     }
@@ -213,32 +140,6 @@ function invalidateNzPostToken() {
 }
 
 async function getNzPostAccessToken(forceRefresh = false): Promise<string> {
-  // Try KV first (shared cache across serverless instances)
-  // Try Upstash (if configured), then Vercel KV (shared cache across serverless instances)
-  if (!forceRefresh) {
-    if (USE_UPSTASH) {
-      try {
-        const cached = await upstashGet('nzpost:access_token')
-        if (cached && cached.token && cached.expiresAt > Date.now()) {
-          return cached.token
-        }
-      } catch (e) {
-        // continue to other flows
-      }
-    }
-
-    if (USE_VERCEL_KV) {
-      try {
-        const cached = await kvGet('nzpost:access_token')
-        if (cached && cached.token && cached.expiresAt > Date.now()) {
-          return cached.token
-        }
-      } catch (e) {
-        // continue to memory/local flow
-      }
-    }
-  }
-
   if (
     !forceRefresh &&
     nzPostTokenCache &&
@@ -249,6 +150,19 @@ async function getNzPostAccessToken(forceRefresh = false): Promise<string> {
 
   if (nzPostTokenPromise && !forceRefresh) {
     return nzPostTokenPromise
+  }
+
+  // if configured, try reading a cached token from Upstash first
+  if (!forceRefresh && USE_UPSTASH) {
+    try {
+      const cached = await upstashGet('nzpost:access_token')
+      if (cached && cached.token && cached.expiresAt > Date.now()) {
+        nzPostTokenCache = cached
+        return cached.token
+      }
+    } catch (e) {
+      // ignore and continue
+    }
   }
 
   const { clientId, clientSecret } = getNzPostCredentials()
@@ -296,14 +210,11 @@ async function getNzPostAccessToken(forceRefresh = false): Promise<string> {
     const expiresIn = Number(data?.expires_in) || 1800
     const expiresAt = Date.now() + Math.max(expiresIn - 60, 60) * 1000
     nzPostTokenCache = { token, expiresAt }
-    // store in Upstash or KV as available
+    // Best-effort: store token in Upstash for shared caching across serverless instances
     ;(async () => {
       try {
-        if (USE_UPSTASH) {
+        if (USE_UPSTASH)
           await upstashSet('nzpost:access_token', nzPostTokenCache, expiresIn)
-        } else {
-          await kvSet('nzpost:access_token', nzPostTokenCache, expiresIn)
-        }
       } catch (e) {
         /* ignore */
       }

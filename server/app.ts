@@ -114,6 +114,48 @@ app.get('/api/address/:id', async (req, res) => {
   }
 })
 
+// Internal upstash check - guarded by INTERNAL_CHECK_SECRET env var
+app.get('/api/internal/upstash-check', async (req, res) => {
+  const secret = process.env.INTERNAL_CHECK_SECRET
+  if (!secret)
+    return res
+      .status(403)
+      .json({ ok: false, message: 'INTERNAL_CHECK_SECRET not configured' })
+  const hdr = req.headers['x-internal-secret']
+  if (hdr !== secret)
+    return res.status(401).json({ ok: false, message: 'unauthorized' })
+
+  // Resolve Upstash config using common environment variable names
+  const upstashUrl =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    process.env.REDIS_URL ||
+    process.env.KV_URL ||
+    null
+  const upstashToken =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    process.env.KV_REST_API_READ_ONLY_TOKEN ||
+    null
+  if (!upstashUrl || !upstashToken)
+    return res.json({
+      ok: true,
+      upstash: false,
+      message: 'upstash not configured',
+    })
+
+  try {
+    const mod = await import('@upstash/redis')
+    const RedisCtor = mod.Redis || mod.default?.Redis
+    if (!RedisCtor) return res.json({ ok: true, upstash: false })
+    const client = new RedisCtor({ url: upstashUrl, token: upstashToken })
+    const val = await client.get('nzpost:access_token')
+    return res.json({ ok: true, upstash: true, key: val ?? null })
+  } catch (e) {
+    return res.json({ ok: true, upstash: false })
+  }
+})
+
 // Fallback to client index
 app.get('*', (_req, res) => {
   res.sendFile(path.join(PROJECT_ROOT, 'build', 'index.html'))
