@@ -124,4 +124,3 @@ app.listen(PORT, () => {
 })
 
 export default app
-curl -sS "http://localhost:4000/api/predict?q=200+George+St&provider=nzpost-au" | jq -r '.'

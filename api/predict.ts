@@ -1,5 +1,8 @@
 import { geoscapeProvider } from '../server/providers/geoscape'
-import { nzPostDomesticProvider, nzPostAustraliaProvider } from '../server/providers/nzpost'
+import {
+  nzPostDomesticProvider,
+  nzPostAustraliaProvider,
+} from '../server/providers/nzpost'
 import type { Provider } from '../server/providers/types'
 
 const providers: Record<string, Provider> = {
@@ -16,11 +19,15 @@ const providerAliases: Record<string, string> = {
 }
 
 function resolveProviderId(req: any): string {
-  const providerRaw = Array.isArray(req.query.provider) ? req.query.provider[0] : req.query.provider
+  const providerRaw = Array.isArray(req.query.provider)
+    ? req.query.provider[0]
+    : req.query.provider
   const providerParam = providerRaw == null ? undefined : String(providerRaw)
   if (providerParam && providers[providerParam]) return providerParam
 
-  const countryRaw = Array.isArray(req.query.country) ? req.query.country[0] : req.query.country
+  const countryRaw = Array.isArray(req.query.country)
+    ? req.query.country[0]
+    : req.query.country
   const countryParam = countryRaw == null ? undefined : String(countryRaw)
   if (countryParam) {
     const alias = providerAliases[String(countryParam).toUpperCase()]
@@ -32,12 +39,17 @@ function resolveProviderId(req: any): string {
 
 export default async function handler(req: any, res: any) {
   try {
-    const q = (req.query.q ?? req.query.query ?? req.query.text ?? '').toString().trim()
+    const q = (req.query.q ?? req.query.query ?? req.query.text ?? '')
+      .toString()
+      .trim()
     if (!q) return res.status(400).json({ message: 'query parameter required' })
 
     const providerId = resolveProviderId(req)
     const provider = providers[providerId]
-    if (!provider) return res.status(400).json({ message: `Unknown provider: ${providerId}` })
+    if (!provider)
+      return res
+        .status(400)
+        .json({ message: `Unknown provider: ${providerId}` })
 
     const result = await provider.predict(q)
     res.json(result)
