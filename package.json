@@ -2,6 +2,7 @@
   "name": "geo-address-validate",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "start": "concurrently \"npm run start:server\" \"npm run start:client\"",
     "start:client": "PORT=3000 react-scripts start",
