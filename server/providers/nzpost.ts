@@ -52,7 +52,8 @@ async function getUpstashClient() {
     upstashClientPromise = (async () => {
       try {
         const mod = await import('@upstash/redis')
-        const RedisCtor = mod.Redis || (mod as any).default?.Redis || (mod as any).default
+        const RedisCtor =
+          mod.Redis || (mod as any).default?.Redis || (mod as any).default
         if (!RedisCtor) return null
         return new RedisCtor({
           url: UPSTASH_CONFIG.url!,
