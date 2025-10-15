@@ -1,16 +1,18 @@
-import { Provider, SuggestResponse, DetailResponse } from './types'
+import { Provider, SuggestResponse, DetailResponse } from './types.js'
 
-const GEOSCAPE_PREDICT_URL = (process.env.GEOSCAPE_PREDICT_URL ||
+const GEOSCAPE_PREDICT_URL = (
+  process.env.GEOSCAPE_PREDICT_URL ||
   'https://api.psma.com.au/v1/predictive/address'
 ).replace(/\/$/, '')
 
-const GEOSCAPE_ADDRESS_URL = (process.env.GEOSCAPE_ADDRESS_URL || GEOSCAPE_PREDICT_URL).replace(
-  /\/$/,
-  ''
-)
+const GEOSCAPE_ADDRESS_URL = (
+  process.env.GEOSCAPE_ADDRESS_URL || GEOSCAPE_PREDICT_URL
+).replace(/\/$/, '')
 
 const GEOSCAPE_PREDICT_QUERY_PARAM =
-  process.env.GEOSCAPE_PREDICT_QUERY_PARAM || process.env.GEOSCAPE_QUERY_PARAM || 'query'
+  process.env.GEOSCAPE_PREDICT_QUERY_PARAM ||
+  process.env.GEOSCAPE_QUERY_PARAM ||
+  'query'
 
 function getGeoscapeAuthToken() {
   return process.env.GEOSCAPE_CONSUMER_KEY || process.env.GEOSCAPE_API_KEY
@@ -55,7 +57,11 @@ function normaliseSuggestions(data: any) {
 
   if (data && typeof data === 'object') {
     const maybeSingle =
-      data.suggestion || data.result || data.prediction || data.address || data.item
+      data.suggestion ||
+      data.result ||
+      data.prediction ||
+      data.address ||
+      data.item
     if (maybeSingle) {
       return [maybeSingle]
     }
@@ -84,7 +90,9 @@ function suggestionText(suggestion: any) {
 async function geoscapePredict(query: string): Promise<SuggestResponse> {
   const authToken = getGeoscapeAuthToken()
   if (!authToken) {
-    throw new Error('GEOSCAPE_CONSUMER_KEY (or GEOSCAPE_API_KEY fallback) not configured')
+    throw new Error(
+      'GEOSCAPE_CONSUMER_KEY (or GEOSCAPE_API_KEY fallback) not configured'
+    )
   }
 
   const url = new URL(GEOSCAPE_PREDICT_URL)
@@ -130,7 +138,9 @@ async function geoscapePredict(query: string): Promise<SuggestResponse> {
 async function geoscapeDetail(id: string): Promise<DetailResponse> {
   const authToken = getGeoscapeAuthToken()
   if (!authToken) {
-    throw new Error('GEOSCAPE_CONSUMER_KEY (or GEOSCAPE_API_KEY fallback) not configured')
+    throw new Error(
+      'GEOSCAPE_CONSUMER_KEY (or GEOSCAPE_API_KEY fallback) not configured'
+    )
   }
 
   const url = new URL(`${GEOSCAPE_ADDRESS_URL}/${encodeURIComponent(id)}`)

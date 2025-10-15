@@ -1,9 +1,9 @@
-import { geoscapeProvider } from './_lib/providers/geoscape'
+import { geoscapeProvider } from './_lib/providers/geoscape.js'
 import {
   nzPostDomesticProvider,
   nzPostAustraliaProvider,
-} from './_lib/providers/nzpost'
-import type { Provider } from './_lib/providers/types'
+} from './_lib/providers/nzpost.js'
+import type { Provider } from './_lib/providers/types.js'
 
 const providers: Record<string, Provider> = {
   [geoscapeProvider.id]: geoscapeProvider,

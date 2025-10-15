@@ -1,4 +1,4 @@
-import { Provider, SuggestResponse, DetailResponse } from './types'
+import { Provider, SuggestResponse, DetailResponse } from './types.js'
 
 const NZPOST_BASE_URL = (
   process.env.NZPOST_BASE_URL || 'https://api.nzpost.co.nz/addresschecker/1.0'
