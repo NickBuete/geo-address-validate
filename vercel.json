@@ -1,11 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/**/*.ts", "use": "@vercel/node" },
-    { "src": "package.json", "use": "@vercel/static-build" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  "buildCommand": "npm run build",
+  "outputDirectory": "build",
+  "rewrites": [{ "source": "/api/:path*", "destination": "/api/:path*" }]
 }
